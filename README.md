@@ -91,3 +91,8 @@ resnet18 have 14028106 paramerters in total
 ```
 ---
 
+# Reference
+```
+Shaoxiong Ji. (2018, March 30). A PyTorch Implementation of Federated Learning. Zenodo. http://doi.org/10.5281/zenodo.4321561
+```
+
