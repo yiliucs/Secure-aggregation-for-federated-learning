@@ -7,22 +7,6 @@ from torch import nn
 import torch.nn.functional as F
 import copy
 
-def quantize_matrix(matrix, bit_width=16, alpha=0.5):
-    og_sign = torch.sign(matrix)
-    uns_matrix = matrix * og_sign
-    uns_result = torch.round((uns_matrix * (pow(2, bit_width - 1) - 1.0) / alpha))
-    result = (og_sign * uns_result)
-    return result
-
-
-def unquantize_matrix(matrix, bit_width=16, alpha=0.5):
-    matrix = matrix.int()
-    og_sign = torch.sign(matrix)
-    uns_matrix = matrix * og_sign
-    uns_result = uns_matrix * alpha / (pow(2, bit_width - 1) - 1.0)
-    result = og_sign * uns_result
-    return result.float()
-
 
 class MLP(nn.Module):
     def __init__(self, dim_in, dim_hidden, dim_out):
@@ -64,61 +48,40 @@ class CNNMnist(nn.Module):
         x = self.fc2(x)
         return x
 
-    def update(self):
-        self.lastc1 = copy.deepcopy(self.conv1.weight.detach())
-        self.lastc2 = copy.deepcopy(self.conv2.weight.detach())
-        self.lastf1 = copy.deepcopy(self.fc1.weight.detach())
-        self.lastf2 = copy.deepcopy(self.fc2.weight.detach())
 
-    def diff(self):
-        temp1 = self.conv1.weight.detach() - self.lastc1
-        temp2 = self.conv2.weight.detach() - self.lastc2
-        temp3 = self.fc1.weight.detach() - self.lastf1
-        temp4 = self.fc2.weight.detach() - self.lastf2
+class AlexNetMnist(nn.Module):
+    def __init__(self, args):
+        super(AlexNetMnist, self).__init__()
+        self.features = nn.Sequential(
+            nn.Conv2d(args.num_channels, 64, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2),
+            nn.Conv2d(64, 192, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2),
+            nn.Conv2d(192, 384, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(384, 256, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2),
+        )
+        self.classifier = nn.Sequential(
+            nn.Dropout(),
+            nn.Linear(256 * 1 * 1, 4096),
+            nn.ReLU(inplace=True),
+            nn.Dropout(),
+            nn.Linear(4096, 4096),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096, args.num_classes),
+        )
 
-        self.conv1.weight = copy.deepcopy(nn.Parameter(temp1))
-        self.conv2.weight = copy.deepcopy(nn.Parameter(temp2))
-        self.fc1.weight = copy.deepcopy(nn.Parameter(temp3))
-        self.fc2.weight = copy.deepcopy(nn.Parameter(temp4))
-
-    def add(self):
-        temp1 = self.conv1.weight + self.lastc1
-        temp2 = self.conv2.weight + self.lastc2
-        temp3 = self.fc1.weight + self.lastf1
-        temp4 = self.fc2.weight + self.lastf2
-
-        self.conv1.weight = copy.deepcopy(nn.Parameter(temp1))
-        self.conv2.weight = copy.deepcopy(nn.Parameter(temp2))
-        self.fc1.weight = copy.deepcopy(nn.Parameter(temp3))
-        self.fc2.weight = copy.deepcopy(nn.Parameter(temp4))
-
-    def quant(self, args):
-        c1 = quantize_matrix(self.conv1.weight, self.bit_width, self.alpha)
-        self.conv1.weight = torch.nn.Parameter(torch.FloatTensor(c1).to(args.device))
-
-        c2 = quantize_matrix(self.conv2.weight, self.bit_width, self.alpha)
-        self.conv2.weight = torch.nn.Parameter(torch.FloatTensor(c2).to(args.device))
-
-        f1 = quantize_matrix(self.fc1.weight, self.bit_width, self.alpha)
-        self.fc1.weight = torch.nn.Parameter(torch.FloatTensor(f1).to(args.device))
-
-        f2 = quantize_matrix(self.fc2.weight, self.bit_width, self.alpha)
-        self.fc2.weight = torch.nn.Parameter(torch.FloatTensor(f2).to(args.device))
-
-
-    def unquant(self, args):
-        c1 = unquantize_matrix(self.conv1.weight.detach(), self.bit_width, self.alpha)
-        self.conv1.weight = torch.nn.Parameter(torch.FloatTensor(c1).to(args.device))
-
-        c2 = unquantize_matrix(self.conv2.weight.detach(), self.bit_width, self.alpha)
-        self.conv2.weight = torch.nn.Parameter(torch.FloatTensor(c2).to(args.device))
-
-        f1 = unquantize_matrix(self.fc1.weight.detach(), self.bit_width, self.alpha)
-        self.fc1.weight = torch.nn.Parameter(torch.FloatTensor(f1).to(args.device))
-
-        f2 = unquantize_matrix(self.fc2.weight.detach(), self.bit_width, self.alpha)
-        self.fc2.weight = torch.nn.Parameter(torch.FloatTensor(f2).to(args.device))
-
+    def forward(self, x):
+        x = self.features(x)
+        x = x.view(x.size(0), 256 * 1 * 1)
+        x = self.classifier(x)
+        return x
 
 class CNNCifar(nn.Module):
     def __init__(self, args):
@@ -203,6 +166,39 @@ class Bottleneck(nn.Module):
 
         return out
 
+class AlexNetCifar(nn.Module):
+    def __init__(self, args):
+        super(AlexNetCifar, self).__init__()
+        self.features = nn.Sequential(
+            nn.Conv2d(args.num_channels, 64, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(64, 192, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(192, 384, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(384, 256, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+        )
+        self.classifier = nn.Sequential(
+            nn.Dropout(),
+            nn.Linear(256 * 2 * 2, 4096),
+            nn.ReLU(inplace=True),
+            nn.Dropout(),
+            nn.Linear(4096, 4096),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096, args.num_classes),
+        )
+
+    def forward(self, input):
+        output = self.features(input)
+        output = output.view(-1, 256*2*2)
+        output = self.classifier(output)
+        return output
 
 
 
