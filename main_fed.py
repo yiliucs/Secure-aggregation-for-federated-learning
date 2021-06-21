@@ -11,10 +11,10 @@ import numpy as np
 from torchvision import datasets, transforms
 import torch
 
-from utils.sampling import mnist_iid, mnist_noniid, cifar_iid
+from utils.sampling import mnist_iid, mnist_noniid, cifar_iid, fmnist_iid
 from utils.options import args_parser
 from models.Update import LocalUpdate
-from models.Nets import MLP, CNNMnist, CNNCifar
+from models.Nets import MLP, CNNMnist, CNNCifar, AlexNetCifar, AlexNetMnist, CNNCeleba
 from models.Fed import FedAvg
 from models.test import test_img
 from service.client import *
@@ -22,7 +22,7 @@ from service.utils.DH import *
 
 if __name__ == '__main__':
     # parse args
-    print('差值量化')
+    #print('差值量化')
 
     args = args_parser()
     args.device = torch.device('cuda:{}'.format(args.gpu) if torch.cuda.is_available() and args.gpu != -1 else 'cpu')
@@ -37,15 +37,15 @@ if __name__ == '__main__':
             dict_users = mnist_iid(dataset_train, args.num_users)
         else:
             dict_users = mnist_noniid(dataset_train, args.num_users)
-    # elif args.dataset == 'Fmnist':
-    #     trans_mnist = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
-    #     dataset_train = datasets.FashionMNIST('../data/Fmnist/', train=True, download=True, transform=trans_mnist)
-    #     dataset_test = datasets.FashionMNIST('../data/Fmnist/', train=False, download=True, transform=trans_mnist)
-    #     # sample users
-    #     if args.iid:
-    #         dict_users = mnist_iid(dataset_train, args.num_users)
-    #     else:
-    #         dict_users = mnist_noniid(dataset_train, args.num_users)
+    elif args.dataset == 'fmnist':
+         trans_mnist = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
+         dataset_train = datasets.FashionMNIST('../data/fmnist/', train=True, download=True, transform=trans_mnist)
+         dataset_test = datasets.FashionMNIST('../data/fmnist/', train=False, download=True, transform=trans_mnist)
+         # sample users
+         if args.iid:
+             dict_users = fmnist_iid(dataset_train, args.num_users)
+         else:
+             exit('Error: only consider IID setting in CIFAR10')
     elif args.dataset == 'cifar':
         trans_cifar = transforms.Compose(
             [transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
@@ -76,17 +76,25 @@ if __name__ == '__main__':
     # build model
     if args.model == 'cnn' and args.dataset == 'cifar':
         net_glob = CNNCifar(args=args).to(args.device)
+    elif args.model == 'alexnet' and args.dataset == 'cifar':
+        net_glob = AlexNetCifar(args=args).to(args.device)
     elif args.model == 'cnn' and args.dataset == 'mnist':
         net_glob = CNNMnist(args=args).to(args.device)
-    elif args.model == 'cnn' and args.dataset == 'Fmnist':
+    elif args.model == 'alexnet' and args.dataset == 'mnist':
+        net_glob = AlexNetMnist(args=args).to(args.device)
+    elif args.model == 'cnn' and args.dataset == 'FashionMnist':
         net_glob = CNNMnist(args=args).to(args.device)
+    elif args.model == 'alexnet' and args.dataset == 'FashionMnist':
+        net_glob = AlexNetMnist(args=args).to(args.device)
+    elif args.model == 'cnn' and args.dataset == 'celeba':
+        net_glob = CNNCeleba(args=args).to(args.device)
     elif args.model == 'mlp':
         len_in = 1
         for x in img_size:
             len_in *= x
         net_glob = MLP(dim_in=len_in, dim_hidden=200, dim_out=args.num_classes).to(args.device)
     else:
-        exit('Error: unrecognized model')
+        exit('Error: unrecognized model')    
     print(net_glob)
     net_glob.train()
 
